@@ -46,13 +46,12 @@ data_iter = iter(trainloader)
 
 #getting the next batch of the images and labels
 images, labels = data_iter.next()
-#test = images.view(images.size(0), -1)
-#print(test.size())
+test = images.view(images.size(0), -1)
 
 Z_dim = 100
-#X_dim = test.size(1)
+X_dim = test.size(1)
 h_dim = 128
-lr = 1e-3
+lr = 1e-4
 
 
 def imshow(img):
@@ -78,18 +77,23 @@ def init_weight(m):
 class Gen(nn.Module):
     def __init__(self):
         super(Gen, self).__init__()
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=5, stride=1, padding=2),
+        self.model = nn.Sequential(
+            nn.ConvTranspose2d(1, 10, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(10),
             #nn.ReLU(),
-            nn.MaxPool2d(kernel_size=1, stride=1),
-            nn.Sigmoid())
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(64, 1, kernel_size=5, stride=1, padding=2),
+            #nn.MaxPool2d(kernel_size=1, stride=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(10, 5, kernel_size=5, stride=1, padding=2),
+            nn.BatchNorm2d(5),
+            nn.ReLU(),
+            #nn.MaxPool2d(kernel_size=1, stride=1),
+            nn.ConvTranspose2d(5, 1, kernel_size=5, stride=1, padding=2),
+            #nn.BatchNorm2d(5),
+            #nn.MaxPool2d(kernel_size=1, stride=1),
             #nn.ReLU(),
-            nn.MaxPool2d(kernel_size=1, stride=1),
-            nn.Sigmoid())
-        #self.fc1 = nn.Linear(784,128)
-        #self.fc2 = nn.Linear(128, 1)
+            #nn.Conv2d(5,1,kernel_size=5, stride=1, padding=2),
+            nn.Tanh())
+   
         '''
         self.model = nn.Sequential(
             
@@ -101,38 +105,33 @@ class Gen(nn.Module):
         )
         self.model.apply(init_weight)
         '''
-        #self.fc1.apply(init_weight)
-        #self.fc2.apply(init_weight)
     def forward(self, input):
-        out = self.layer1(input)
-        #print(out.shape)
-        out = self.layer2(out)
-        #print(out.shape)
-        #print(out.shape)
-        #out = out.reshape(out.size(0), -1)
-        #print(out.shape)
-        #out = self.fc1(out)
-        #out = self.fc2(out)
-        return out
-        #return self.model(input)
+        return self.model(input)
+
 
 
 class Dis(nn.Module):
     def __init__(self):
         super(Dis, self).__init__()
-        self.layer1 = nn.Sequential(
-            nn.Conv2d(1, 64, kernel_size=5, stride=1, padding=2),
-            #nn.ReLU(),
-            nn.MaxPool2d(kernel_size=1, stride=1),
-            nn.Sigmoid())
-        self.layer2 = nn.Sequential(
-            nn.Conv2d(64, 1, kernel_size=5, stride=1, padding=2),
-            #nn.ReLU(),
-            nn.MaxPool2d(kernel_size=1, stride=1),
-            nn.ReLU(),
-            nn.Conv2d()
-        #self.fc1 = nn.Linear(784, 128)
-        #self.fc2 = nn.Linear(128, 1)
+        self.model = nn.Sequential(
+            nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=2),
+            #nn.BatchNorm2d(5),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            #nn.LeakyReLU(),
+            nn.Conv2d(5, 10, kernel_size=5, stride=1, padding=2),
+            #nn.BatchNorm2d(10),
+            nn.LeakyReLU(),
+            nn.MaxPool2d(kernel_size=2, stride=2))
+            
+        self.linear = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(490, 100),
+            nn.LeakyReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(100, 1),
+            nn.Sigmoid()
+        )
         '''
         self.model = nn.Sequential(
             
@@ -143,77 +142,61 @@ class Dis(nn.Module):
             
         )
         '''
-        #self.fc1.apply(init_weight)
-        #self.fc2.apply(init_weight)
+        self.linear.apply(init_weight)
     def forward(self, input):
-        out = self.layer1(input)
-        #print(out.shape)
-        out = self.layer2(out)
-        #print(out.shape)
-        #print(out.shape)
-        #out = out.reshape(out.size(0), -1)
-        #print(out.shape)
-        #out = self.fc1(out)
-        #out = self.fc2(out)
+        out = self.model(input)
+        out = out.view(out.size(0), -1)
+        out = self.linear(out)
         return out
-        #return self.model(input)    
+
 
 G = Gen()
 D = Dis()
 
 G_solver = optim.Adam(G.parameters(), lr=lr)
-D_solver = optim.Adam(D.parameters(), lr=lr)
+#D_solver = optim.Adam(D.parameters(), lr=lr)
+#G_solver = optim.SGD(G.parameters(), lr = lr)
+D_solver = optim.SGD(G.parameters(), lr = lr)
 
 
-for epoch in tqdm(range(8)):
+for epoch in tqdm(range(15)):
     G_loss_run = 0.0
     D_loss_run = 0.0
     for i, data in tqdm(enumerate(trainloader)):
         X,_ = data 
-        #print(X.shape)
         mb_size = X.size(0)
-        #X = X.view(X.size(0), -1)
 
-        #one_labels = torch.ones(mb_size, 1)
-        #zero_labels = torch.zeros(mb_size, 1)
-        one_labels = torch.ones(mb_size, 1, 28, 28)
-        zero_labels = torch.zeros(mb_size, 1, 28, 28)
+        one_labels = torch.ones(mb_size, 1)
+        zero_labels = torch.zeros(mb_size, 1)
 
-        #z = torch.randn(mb_size, Z_dim)
         z = torch.randn(mb_size, 1, 28, 28)
         G_sample = G(z)
         D_fake = D(G_sample)
-        #print("D_fake = ", D_fake.shape)
         D_real = D(X)
-        #print("D_real = ", D_real.shape)
-        #print(D_fake)
+
         D_fake_loss = F.binary_cross_entropy(D_fake, zero_labels)
         D_real_loss = F.binary_cross_entropy(D_real, one_labels)
-        print("Discriminator Fake Loss: ", D_fake_loss)
-        print("Discriminator Real Loss: ", D_real_loss)
 
         D_loss = D_real_loss + D_fake_loss
         D_solver.zero_grad()
         D_loss.backward()
         D_solver.step()
 
-        #z = torch.randn(mb_size, Z_dim)
         z = torch.randn(mb_size, 1, 28, 28)
         G_sample = G(z)
         D_fake = D(G_sample)
 
         G_loss = F.binary_cross_entropy(D_fake, one_labels)
-        print(G_loss)
         G_solver.zero_grad()
         G_loss.backward()
         G_solver.step()
-
-        samples = G(z).detach()
-        samples = samples.view(mb_size, 1, 28, 28)
-        imshow(samples)
+        
+        if(i%100 == 0):
+            samples = G(z).detach()
+            samples = samples.view(mb_size, 1, 28, 28)
+            imshow(samples)
+        
         #print('Epoch: {}', 'G_loss: {}', 'D_loss: {}'.format(epoch, G_loss_run/(i+1), D_loss_run/(i+1)))
     samples = G(z).detach()
     samples = samples.view(mb_size, 1, 28, 28)
     imshow(samples)
-
-
