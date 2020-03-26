@@ -28,10 +28,11 @@ import torchvision.transforms as transforms
 from tqdm import tqdm
 
 #mini-batch size
-mb_size = 64
+mb_size = 128
+img_size = 64
 
 #this will transform data to tensor format which is pytorch's expected format
-transform = transforms.Compose([transforms.ToTensor()])
+transform = transforms.Compose([transforms.Scale(img_size), transforms.ToTensor()])
 
 #here we download the dataset and transform it, train=True will only download training dataset
 trainset = torchvision.datasets.MNIST(root = './NewData', download = True, train = True, transform = transform)
@@ -45,13 +46,15 @@ trainloader = torch.utils.data.DataLoader(trainset, shuffle=True, batch_size=mb_
 data_iter = iter(trainloader)
 
 #getting the next batch of the images and labels
-images, labels = data_iter.next()
+'''
+# images, labels = data_iter.next()
 test = images.view(images.size(0), -1)
 
 Z_dim = 100
 X_dim = test.size(1)
 h_dim = 128
-lr = 1e-4
+'''
+lr = 2e-4
 
 
 def imshow(img):
@@ -75,23 +78,21 @@ def init_weight(m):
 
 #class for generator, inheriting nn.Module class 
 class Gen(nn.Module):
-    def __init__(self):
+    def __init__(self, d=128):
         super(Gen, self).__init__()
         self.model = nn.Sequential(
-            nn.ConvTranspose2d(1, 15, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(15),
+            nn.ConvTranspose2d(100, d*8, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(d*8),
             nn.ReLU(),
-            #nn.MaxPool2d(kernel_size=1, stride=1),
-            #nn.ReLU(),
-            nn.ConvTranspose2d(15, 10, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(10),
+            nn.ConvTranspose2d(d*8, d*4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(d*4),
             nn.ReLU(),
-            #nn.MaxPool2d(kernel_size=1, stride=1),
-            nn.ConvTranspose2d(10, 1, kernel_size=5, stride=1, padding=2),
-            #nn.BatchNorm2d(5),
-            #nn.MaxPool2d(kernel_size=1, stride=1),
-            #nn.ReLU(),
-            #nn.Conv2d(5,1,kernel_size=5, stride=1, padding=2),
+            nn.ConvTranspose2d(d*4, d*2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(d*2),
+            nn.ReLU(),
+            nn.ConvTranspose2d(d*2, d, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.ReLU(),
+            nn.ConvTranspose2d(d, 1, kernel_size=4, stride=2, padding=1, bias=False),
             nn.Tanh())
    
         '''
@@ -111,24 +112,27 @@ class Gen(nn.Module):
 
 
 class Dis(nn.Module):
-    def __init__(self):
+    def __init__(self, d=128):
         super(Dis, self).__init__()
         self.model = nn.Sequential(
-            nn.Conv2d(1, 5, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(5),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            #nn.LeakyReLU(),
-            nn.Conv2d(5, 10, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(10),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Conv2d(10, 15, kernel_size=5, stride=1, padding=2),
-            nn.BatchNorm2d(15),
-            nn.LeakyReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2))
+            nn.Conv2d(1, d, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.LeakyReLU(0.2),
 
-            
+            nn.Conv2d(d, d*2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(d*2),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(d*2, d*4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(d*4),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(d*4, d*8, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(d*8),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(d*8, 1, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.Sigmoid())
+        '''    
         self.linear = nn.Sequential(
             nn.Dropout(0.3),
             nn.Linear(135, 100),
@@ -137,6 +141,7 @@ class Dis(nn.Module):
             nn.Linear(100, 1),
             nn.Sigmoid()
         )
+        '''
         '''
         self.model = nn.Sequential(
             
@@ -147,21 +152,21 @@ class Dis(nn.Module):
             
         )
         '''
-        self.linear.apply(init_weight)
+        #self.linear.apply(init_weight)
     def forward(self, input):
         out = self.model(input)
-        out = out.view(out.size(0), -1)
-        out = self.linear(out)
+        #out = out.view(out.size(0), -1)
+        #out = self.linear(out)
         return out
 
 
 G = Gen()
 D = Dis()
 
-G_solver = optim.Adam(G.parameters(), lr=lr)
-#D_solver = optim.Adam(D.parameters(), lr=lr)
+G_solver = optim.Adam(G.parameters(), lr=lr, betas=(0.5, 0.999))
+D_solver = optim.Adam(D.parameters(), lr=lr, betas=(0.5, 0.999))
 #G_solver = optim.SGD(G.parameters(), lr = lr)
-D_solver = optim.SGD(G.parameters(), lr = lr)
+#D_solver = optim.SGD(G.parameters(), lr = lr)
 
 print(torch.backends.cudnn.enabled)
 print(torch.cuda.is_available())
@@ -176,7 +181,7 @@ else:
 G = G.to(device)
 D = D.to(device)
 
-for epoch in tqdm(range(15)):
+for epoch in tqdm(range(50)):
     G_loss_run = 0.0
     D_loss_run = 0.0
     for i, data in tqdm(enumerate(trainloader)):
@@ -189,7 +194,7 @@ for epoch in tqdm(range(15)):
         zero_labels = torch.zeros(mb_size, 1)
         zero_labels, one_labels = zero_labels.to(device), one_labels.to(device)
 
-        z = torch.randn(mb_size, 1, 28, 28)
+        z = torch.randn((mb_size, 100)).view(-1, 100, 1, 1)
         z = z.to(device)
         G_sample = G(z)
         D_fake = D(G_sample)
@@ -203,7 +208,7 @@ for epoch in tqdm(range(15)):
         D_loss.backward()
         D_solver.step()
 
-        z = torch.randn(mb_size, 1, 28, 28)
+        z = torch.randn((mb_size, 100)).view(-1, 100, 1, 1)
         z = z.to(device)
         G_sample = G(z)
         D_fake = D(G_sample)
@@ -213,7 +218,14 @@ for epoch in tqdm(range(15)):
         G_loss.backward()
         G_solver.step()
         
+        if i%100==0:
+            samples = G(z).detach()
+            print(samples.shape)
+            samples = samples.view(mb_size, 1, 64, 64)
+            imshow(samples.cpu())
+
         #print('Epoch: {}', 'G_loss: {}', 'D_loss: {}'.format(epoch, G_loss_run/(i+1), D_loss_run/(i+1)))
-    samples = G(z).detach()
-    samples = samples.view(mb_size, 1, 28, 28)
-    imshow(samples.cpu())
+    
+
+    
+    
